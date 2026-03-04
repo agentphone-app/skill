@@ -2,12 +2,6 @@
 
 Phone calls for AI agents. [OpenClaw](https://openclaw.com)-compatible skill.
 
-## Demo
-
-https://github.com/user-attachments/assets/3933b5f6-5668-44bd-864e-9fa4b40552da
-
-> *See it in action — booking a restaurant reservation via API call.*
-
 ## What it does
 
 Your AI agent sends a phone number + objective. A voice AI makes the call, navigates IVR menus, talks to humans, and returns structured results: outcome, transcript, and recording.
