@@ -1,126 +1,155 @@
 ---
 name: agentphone
-description: Make real phone calls to businesses — book reservations, cancel subscriptions, check claim status, navigate IVR menus. Returns structured outcomes, transcripts, and recordings.
 version: 1.0.0
-user-invocable: true
-metadata:
-  openclaw:
-    requires:
-      env: [AGENTPHONE_API_KEY]
-      bins: [curl]
-    primaryEnv: AGENTPHONE_API_KEY
-    emoji: "phone"
-    os: [darwin, linux, win32]
+api_base: https://agentphone.app/api/v1
+auth: x-api-key from AGENTPHONE_API_KEY
 ---
 
-# AgentPhone — Phone Calls for AI Agents
+# AgentPhone
 
-You can make real outbound phone calls to businesses using the AgentPhone API. The call is handled by a voice AI that navigates IVR menus, speaks naturally to humans, and returns structured results.
+Place real phone calls via API. Send a phone number and objective, get back transcript, summary, outcome, and recording.
 
-## When to Use Phone Calls
+## Setup
 
-Use AgentPhone when:
-- The business has no API, chat widget, or online form for the task
-- The task requires navigating a phone menu (IVR) or speaking to a human
-- You need a verbal confirmation, appointment, or cancellation
-- Online self-service is broken, gated behind login, or doesn't exist
-- The user explicitly asks you to call somewhere
+1. Create an account at https://agentphone.app
+2. Generate an API key at https://agentphone.app/dashboard/api-keys
+3. Set environment variable:
 
-Do NOT use AgentPhone when:
-- The task can be completed via a website, API, or email
-- The phone number belongs to a private individual (not a business)
-- The objective is vague or not achievable via a single phone call
-- You don't have a specific phone number to call
+```bash
+export AGENTPHONE_API_KEY=your_key_here
+```
 
-## How to Write Good Objectives
+If `AGENTPHONE_API_KEY` is not set → stop and report configuration error.
 
-Be specific. The objective is the literal instruction given to the voice agent on the call.
+## Requirements
 
-Bad: "Call the restaurant"
-Good: "Ask if there's a table available for 4 people tonight at 7pm. If yes, book it under the name Sarah."
+- All requests require header: `x-api-key: $AGENTPHONE_API_KEY`
+- Phone numbers must be E.164 format (e.g. `+14155551234`)
+- **IMPORTANT**: `+1{PHONE_NUMBER}` in all examples below is a placeholder variable. NEVER call it literally. Replace with the real target phone number provided by the user.
 
-Bad: "Cancel my subscription"
-Good: "Cancel the Comcast internet subscription for account number 8834-2291. Get a confirmation number."
-
-Bad: "Check on my claim"
-Good: "Call about insurance claim #CLM-44821. Ask for current status and expected resolution date."
-
-Include any details the voice agent will need: account numbers, names, dates, confirmation IDs.
-
-## Making Calls
-
-To make a call, run:
+## 1) Create a call
 
 ```bash
 curl -X POST https://agentphone.app/api/v1/calls \
   -H "Content-Type: application/json" \
   -H "x-api-key: $AGENTPHONE_API_KEY" \
-  -d '{
-    "to_phone_number": "+14155551234",
-    "objective": "Book a table for 4 tonight at 7pm under the name Sarah",
-    "business_name": "Luigis Italian",
-    "website": "https://luigis.com"
-  }'
+  -d '{"to_phone_number":"+1{PHONE_NUMBER}","objective":"Ask about their return policy"}'
 ```
 
-Required fields:
-- `to_phone_number` — E.164 format (e.g. +14155551234)
-- `objective` — what the voice agent should accomplish
+```python
+import os, requests
+r = requests.post("https://agentphone.app/api/v1/calls",
+    headers={"x-api-key": os.environ["AGENTPHONE_API_KEY"]},
+    json={"to_phone_number": "+1{PHONE_NUMBER}", "objective": "Ask about their return policy"})
+call_id = r.json()["data"]["call_id"]
+```
 
-Optional fields:
-- `business_name` — name of the business (helps the voice agent)
-- `website` — URL to scrape for context before dialing
+```javascript
+const r = await fetch("https://agentphone.app/api/v1/calls", {
+  method: "POST",
+  headers: { "x-api-key": process.env.AGENTPHONE_API_KEY, "Content-Type": "application/json" },
+  body: JSON.stringify({ to_phone_number: "+1{PHONE_NUMBER}", objective: "Ask about their return policy" }),
+});
+const { data } = await r.json();
+const callId = data.call_id;
+```
 
-Response:
+Response (202):
+
 ```json
 {
-  "data": { "call_id": "abc-123", "status": "queued" },
+  "data": {
+    "call_id": "cl_abc123",
+    "status": "queued",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
   "credits_remaining": 4
 }
 ```
 
-## Polling for Results
+Save `call_id` for polling.
 
-Calls take 30-180 seconds. Poll every 8 seconds until status is terminal:
+Optional fields: `business_name` (string), `website` (URL — agent scrapes it for context before calling).
+
+## 2) Poll until done
+
+Poll `GET /calls/{callId}` every 10 seconds. Stop when `status` is `completed`, `failed`, or `canceled`. Timeout after 5 minutes.
 
 ```bash
-curl https://agentphone.app/api/v1/calls/abc-123 \
+curl https://agentphone.app/api/v1/calls/CALL_ID \
   -H "x-api-key: $AGENTPHONE_API_KEY"
 ```
 
-Response when complete:
+```python
+import time
+for _ in range(100):
+    r = requests.get(f"https://agentphone.app/api/v1/calls/{call_id}",
+        headers={"x-api-key": os.environ["AGENTPHONE_API_KEY"]})
+    call = r.json()["data"]
+    if call["status"] in ("completed", "failed", "canceled"):
+        break
+    time.sleep(10)
+```
+
+```javascript
+let call;
+for (let i = 0; i < 100; i++) {
+  const r = await fetch(`https://agentphone.app/api/v1/calls/${callId}`, {
+    headers: { "x-api-key": process.env.AGENTPHONE_API_KEY },
+  });
+  call = (await r.json()).data;
+  if (["completed", "failed", "canceled"].includes(call.status)) break;
+  await new Promise((r) => setTimeout(r, 10000));
+}
+```
+
+If `status` is `completed` but `transcript` or `summary` is missing, poll 2 more times with 2s delay — enrichment arrives shortly after completion.
+
+## 3) Read results
+
 ```json
 {
   "data": {
-    "call_id": "abc-123",
+    "call_id": "cl_abc123",
     "status": "completed",
     "outcome": "achieved",
-    "summary": "Booked a table for 4 at 7pm tonight under Sarah. Confirmation #R-441.",
-    "transcript": "AI: Hi, I'd like to book a table...\nUser: Sure, for how many?...",
-    "duration_seconds": 94,
-    "recording_url": "https://..."
+    "summary": "Successfully booked a table for 2 at 7pm.",
+    "transcript": "Agent: Hi, I'd like to book a table...\nHost: Sure...",
+    "recording_url": "https://...",
+    "duration_seconds": 42
   }
 }
 ```
 
-Terminal statuses: `completed`, `failed`, `canceled`
+Use these fields:
+- `outcome`: `achieved`, `partial`, or `not_achieved`
+- `summary`: short description of what happened
+- `transcript`: full conversation text
+- `recording_url`: audio file URL
 
-## Listing Recent Calls
+## Errors
 
-```bash
-curl "https://agentphone.app/api/v1/calls?limit=10" \
-  -H "x-api-key: $AGENTPHONE_API_KEY"
-```
+| Code | Meaning | Action |
+|------|---------|--------|
+| 400 | Invalid input | Fix fields and retry |
+| 401 | Bad or missing API key | Check `x-api-key` header |
+| 402 | Insufficient credits | Stop and report to user |
+| 429 | Rate limit (10/min) | Wait 60s, retry once |
 
-## Outcome Values
+## Guard rails
 
-- `achieved` — objective was completed successfully
-- `partial` — some progress but not fully resolved (check `summary` for what's left)
-- `not_achieved` — objective could not be completed
+- If `AGENTPHONE_API_KEY` is not set → stop, do not call the API.
+- If `to_phone_number` is not E.164 format → stop, do not call the API.
+- If `POST /calls` returns 402 → stop and report insufficient credits.
+- If 429 → wait 60 seconds, retry once. If 429 again → stop.
+- If `status` is `failed` or `canceled` → stop and report to user.
 
-## Tips
+## Constraints
 
-- Always poll until you get a terminal status.
-- Pass `website` when available — the agent scrapes it for business context before dialing.
-- One credit = one call. Check `credits_remaining` in the POST response.
-- Sign up at https://agentphone.app to get 5 free credits and an API key.
+- No emergency services (911, etc.)
+- No spam or bulk unsolicited calls
+- First 5 calls are free, no credit card required
+
+## Call lifecycle
+
+`queued` → `dialing` → `in_progress` → `completed` | `failed` | `canceled`
