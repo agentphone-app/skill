@@ -4,7 +4,7 @@ Phone calls for AI agents. [OpenClaw](https://openclaw.com)-compatible skill.
 
 ## Demo
 
-https://github.com/user-attachments/assets/demo.mp4
+https://github.com/agentphone-app/skill/raw/main/demo.mp4
 
 > *See it in action — booking a restaurant reservation via API call.*
 
