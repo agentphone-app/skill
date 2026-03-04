@@ -1,6 +1,6 @@
 ---
 name: agentphone
-description: Make real phone calls to businesses — book reservations, cancel subscriptions, check claim status, navigate IVR menus. Returns structured outcomes, transcripts, and recordings.
+description: Make real phone calls to businesses. Book reservations, cancel subscriptions, navigate IVR menus. Get transcripts and recordings.
 version: 1.0.0
 user-invocable: true
 metadata:
