@@ -1,6 +1,16 @@
 ---
 name: agentphone
+description: Make real phone calls to businesses — book reservations, cancel subscriptions, check claim status, navigate IVR menus. Returns structured outcomes, transcripts, and recordings.
 version: 1.0.0
+user-invocable: true
+metadata:
+  openclaw:
+    requires:
+      env: [AGENTPHONE_API_KEY]
+      bins: [curl]
+    primaryEnv: AGENTPHONE_API_KEY
+    emoji: "phone"
+    os: [darwin, linux, win32]
 api_base: https://agentphone.app/api/v1
 auth: x-api-key from AGENTPHONE_API_KEY
 ---
